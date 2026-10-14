@@ -1,0 +1,17 @@
+[
+  {"id":"tech-01","difficulty":"simple","question":"SQLite 与 PostgreSQL 的核心架构有什么不同？","rubric":["区分嵌入式与服务端","避免把所有工作负载归为同类","引用支持具体差异"]},
+  {"id":"tech-02","difficulty":"complex","question":"为一个 Windows 单人离线研究工具比较 SQLite 与 PostgreSQL，重点是备份、并发和运维。","rubric":["按约束给有条件建议","讨论并发与恢复","引用和限制明确"]},
+  {"id":"science-01","difficulty":"simple","question":"光合作用中光反应和碳固定分别起什么作用？","rubric":["关键过程无颠倒","区分能量转换和碳固定","来源可追溯"]},
+  {"id":"science-02","difficulty":"complex","question":"比较随机对照试验与观察性研究能支持的因果推断，说明混杂因素的影响。","rubric":["区分相关与因果","包含随机化局限","不把研究类型直接当质量结论"]},
+  {"id":"energy-01","difficulty":"simple","question":"太阳能和风能发电各有哪些基础优点和局限？","rubric":["说明波动性","不编造时点价格","至少两项有来源比较"]},
+  {"id":"energy-02","difficulty":"complex","question":"比较电池储能和抽水蓄能在电网调节中的适用范围，避免用单一指标决定优劣。","rubric":["比较尺度和响应","讨论地理条件","说明资料适用年份"]},
+  {"id":"method-01","difficulty":"simple","question":"什么是系统综述，它与叙述性综述的基本区别是什么？","rubric":["检索与纳排方法","避免笼统优劣判断","引用术语出处"]},
+  {"id":"method-02","difficulty":"complex","question":"如何设计公平的单 Agent 与多 Agent 对照实验？请列出应控制的变量与失败率定义。","rubric":["相同模型工具题目预算","独立质量标准","处理超时失败与重复采样"]},
+  {"id":"history-01","difficulty":"simple","question":"印刷技术如何影响知识传播？限定为基础历史机制，不要求最新研究。","rubric":["明确历史范围","不混淆不同地区发明","结论有依据"]},
+  {"id":"history-02","difficulty":"complex","question":"比较工业革命中技术、能源和制度三种解释视角，指出各自无法单独解释的问题。","rubric":["避免单因解释","明确学说差异","区分事实和解释"]},
+  {"id":"ecology-01","difficulty":"simple","question":"生物多样性可以在哪几个层次上描述？","rubric":["遗传物种生态系统层次","不虚构指标数值","基础定义有来源"]},
+  {"id":"ecology-02","difficulty":"complex","question":"讨论城市绿地对热岛效应的影响机制及其局限，区分局部观测与普遍因果结论。","rubric":["机制与证据区分","气候规模混杂","不编造统一降温幅度"]},
+  {"id":"computing-01","difficulty":"simple","question":"什么是 HTTP 幂等性？GET、PUT 与 POST 的语义有哪些差异？","rubric":["方法语义准确","区分安全与幂等","说明应用层去重"]},
+  {"id":"computing-02","difficulty":"complex","question":"比较 at-most-once、at-least-once 与 exactly-once 的保证，讨论外部模型 API 调用中断后的恢复边界。","rubric":["区分传递与处理","指出外部副作用困难","重试预算与去重建议"]},
+  {"id":"evaluation-01","difficulty":"complex","question":"为什么模型自评不能直接代表事实准确率？设计包含引用支持与人工一致性的评价方法。","rubric":["指出评审偏差","引用存在不等于支持","定义独立复核与一致性"]}
+]
