@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="zh-CN">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#133d35"><title>AgentLab · 研究工作台</title><link rel="stylesheet" href="/assets/style.css"><script src="/assets/app.js" defer></script></head>
+<body>
+<a class="skip" href="#main">跳到工作区</a>
+<aside class="sidebar">
+  <a class="brand" href="/" aria-label="AgentLab 首页"><span class="brand-icon">A<span>·</span></span><span>AgentLab<small>把问题变成有据可查的研究</small></span></a>
+  <button id="new-task" class="new-button"><span>＋</span> 新建研究</button>
+  <div class="side-label">研究记录 <span id="history-count">0</span></div>
+  <nav id="history" aria-label="研究历史"><p class="empty-side">第一项研究，从一个问题开始。</p></nav>
+  <div class="sidebar-foot"><span class="online-dot"></span><span id="connection">正在连接本地服务</span><small>独立本地工作区 · SQLite 持久化<br>AgentLab 1.0</small></div>
+</aside>
+<main id="main">
+  <header class="topbar"><span class="breadcrumb">工作空间 <span>/</span> 深度研究</span><a href="/docs" target="_blank" rel="noopener">API 文档 ↗</a></header>
+  <section id="create-view">
+    <div class="eyebrow">RESEARCH, WITH A VISIBLE PROCESS.</div>
+    <h1>一个好问题，<br><em>值得一场认真研究。</em></h1>
+    <p class="intro">规划、检索、分析与交叉审查，协同走向有来源的答案。<br>你可以看到每一步，也可以随时调整方向。</p>
+    <form id="task-form" class="research-form">
+      <div class="field-heading"><label for="question">你想研究什么？</label><span>01 / 研究问题</span></div>
+      <textarea id="question" name="question" rows="4" minlength="3" maxlength="4000" required placeholder="例如：比较 SQLite 和 PostgreSQL 在本地研究工具中的适用性，说明证据和局限。"></textarea>
+      <div class="examples"><span>从这里开始</span><button type="button" data-example="比较 SQLite 和 PostgreSQL 在本地研究工具中的适用性，并说明局限。">技术选型 ↗</button><button type="button" data-example="如何评价一项研究的证据可靠性？请列出可操作的判断方法。">研究方法 ↗</button><button type="button" data-example="太阳能与风能的优势和局限是什么？限定为基础概念比较。">能源比较 ↗</button></div>
+      <div class="settings-grid">
+        <label>执行模式<select id="execution-mode"><option value="mock">离线演示 · 无需密钥</option><option value="live">真实研究 · 联网并调用模型</option></select></label>
+        <label>模型提供商<select id="provider"><option value="qwen">Qwen / 通义千问</option><option value="kimi">Kimi / Moonshot</option></select></label>
+        <label>研究架构<select id="mode"><option value="multi">多智能体 · 四角色协作</option><option value="single">单智能体 · 对照基线</option></select></label>
+      </div>
+      <div id="mode-note" class="mode-note">演示模式使用固定离线资料和规则回复，仅验证工程流程，不能作为真实研究或实验结果。</div>
+      <label id="scenario-field" class="scenario-field">演示场景 <select id="mock-scenario"><option value="standard">正常完成</option><option value="revise">审查返工 → 重新分析</option><option value="search_more">证据不足 → 补充检索</option><option value="clarify">请求澄清 → 人工补充</option></select><small>显式演示夹具，用于观察真正的图分支；不会模拟成真实模型判断。</small></label>
+      <details class="limits"><summary>预算与执行设置 <span>最多 12 次调用 · 120 秒</span></summary><div class="limit-grid"><label>最大总调用数<input id="max-calls" type="number" min="1" max="40" value="12"></label><label>最大迭代轮数<input id="max-iterations" type="number" min="1" max="8" value="3"></label><label>执行超时 / 秒<input id="timeout" type="number" min="5" max="600" value="120"></label></div><p>预算包括模型、搜索与重试；执行时间不计人工等待。</p></details>
+      <div class="form-bottom"><label class="checkbox"><input id="review-plan" type="checkbox" checked> 开始检索前，由我审核研究计划</label><button class="primary" id="start-research" type="submit">开始研究 <span>↗</span></button></div>
+      <div id="form-error" class="error" role="alert" hidden></div>
+    </form>
+    <div class="principles"><div><span>01</span><strong>过程可见</strong><p>实时查看节点状态与路径变化</p></div><div><span>02</span><strong>证据可查</strong><p>来源、片段与引用一一对应</p></div><div><span>03</span><strong>随时接手</strong><p>编辑计划、补充方向、恢复任务</p></div></div>
+  </section>
+  <section id="task-view" hidden>
+    <div class="task-heading"><div><div class="eyebrow" id="task-kicker">研究任务</div><h1 id="task-title">正在加载…</h1></div><span class="status-pill" id="task-status">载入中</span></div>
+    <div id="task-warning" class="mode-note"></div>
+    <div class="task-layout"><div class="task-work">
+      <section class="panel workflow-panel"><div class="panel-heading"><h2>协作流程</h2><span id="iteration-label">第 1 轮</span></div><div class="workflow" id="workflow"></div><div class="latest-event" id="latest-event" aria-live="polite">准备执行…</div></section>
+      <section id="human-panel" class="human-panel" hidden><div class="human-heading"><span>◎</span><div><h2 id="human-title">等待你审核计划</h2><p id="human-message"></p></div></div><label for="plan-edit">研究计划 <small>每行一项，可直接修改</small></label><textarea id="plan-edit" rows="4"></textarea><label for="direction">调整方向 / 补充说明</label><textarea id="direction" rows="2" maxlength="4000" placeholder="例如：只考虑 Windows 本地单人应用，重点看备份与恢复。"></textarea><div class="human-bottom"><span>修改后从检查点继续</span><button class="primary" id="resume-task">确认并继续 →</button></div><p id="resume-error" class="error" role="alert" hidden></p></section>
+      <section class="panel output-panel"><div class="output-tabs" role="tablist" aria-label="研究结果"><button class="tab active" role="tab" aria-selected="true" data-tab="report">研究报告</button><button class="tab" role="tab" aria-selected="false" data-tab="sources">证据来源 <span id="source-count">0</span></button><button class="tab" role="tab" aria-selected="false" data-tab="trace">执行日志</button><button class="tab" role="tab" aria-selected="false" data-tab="config">配置</button></div>
+        <div id="tab-report" class="tab-content"><div id="report-empty" class="report-empty"><div>⌁</div><h3>研究正在发生</h3><p>完成规划与证据审查后，报告会显示在这里。</p></div><article id="report" hidden></article><div id="citation-banner" class="citation-banner" hidden></div></div>
+        <div id="tab-sources" class="tab-content" hidden><p class="tab-intro">来源是供判断的资料。编号映射通过，不代表来源权威性或每项事实已被证明。</p><div id="sources"></div></div>
+        <div id="tab-trace" class="tab-content" hidden><ol id="trace" class="trace"></ol></div>
+        <div id="tab-config" class="tab-content" hidden><p class="tab-intro">任务保留配置与响应中的实际模型标识，不包含密钥。模型响应未返回标识时记为未知。</p><pre id="configuration"></pre></div>
+      </section>
+      <section id="followup-panel" class="panel followup" hidden><label for="followup">继续追问</label><div><input id="followup" minlength="3" maxlength="2000" placeholder="基于报告，下一步你想了解什么？"><button id="ask-followup" class="secondary">新建追问 ↗</button></div><small>创建新任务并关联当前报告；会按相同执行模式运行。</small></section>
+    </div><aside class="task-aside"><section class="panel metrics"><h2>执行概览</h2><div><span>执行时间</span><strong id="metric-time">—</strong></div><div><span>真实模型调用</span><strong id="metric-calls">0</strong></div><div><span>搜索调用</span><strong id="metric-search">0</strong></div><div><span>输入 / 输出 Tokens</span><strong id="metric-tokens">未知</strong></div><div><span>估算费用 / USD</span><strong id="metric-cost">未知</strong></div><p id="budget-label">总调用 0 / 12</p><div class="budget-meter"><i id="budget-meter"></i></div><small id="metrics-note">人工等待不计入执行时间。</small></section><section class="aside-note"><span>↳</span><p>审查决定下一步：<br>补充检索、修改分析、请求澄清，或完成报告。</p></section><div class="task-actions"><a id="export-md" class="secondary" href="#">↓ 导出 Markdown</a><a id="export-json" class="secondary" href="#">↓ 导出配置与结果</a><button id="stop-task" class="danger" hidden>停止研究</button><button id="retry-task" class="primary" hidden>从检查点继续 →</button></div></aside></div>
+  </section>
+  <footer>AgentLab <span>·</span> 看见过程，理解证据。<span class="footer-right">本地优先 / 可恢复研究</span></footer>
+</main><div id="toast" role="status" hidden></div>
+</body></html>
