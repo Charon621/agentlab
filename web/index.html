@@ -6,6 +6,7 @@
 <aside class="sidebar">
   <a class="brand" href="/" aria-label="AgentLab 首页"><span class="brand-icon">A<span>·</span></span><span>AgentLab<small>把问题变成有据可查的研究</small></span></a>
   <button id="new-task" class="new-button"><span>＋</span> 新建研究</button>
+  <button id="open-models" class="settings-button">⚙ 模型配置</button>
   <div class="side-label">研究记录 <span id="history-count">0</span></div>
   <nav id="history" aria-label="研究历史"><p class="empty-side">第一项研究，从一个问题开始。</p></nav>
   <div class="sidebar-foot"><span class="online-dot"></span><span id="connection">正在连接本地服务</span><small>独立本地工作区 · SQLite 持久化<br>AgentLab 1.0</small></div>
@@ -25,6 +26,7 @@
         <label>模型提供商<select id="provider"><option value="qwen">Qwen / 通义千问</option><option value="kimi">Kimi / Moonshot</option></select></label>
         <label>研究架构<select id="mode"><option value="multi">多智能体 · 四角色协作</option><option value="single">单智能体 · 对照基线</option></select></label>
       </div>
+      <label id="live-model-field" hidden>使用模型配置<select id="model-config"><option value="">请先添加模型配置</option></select><small>在左栏「模型配置」填写密钥。新任务固定所选版本，恢复沿用原配置。</small></label>
       <div id="mode-note" class="mode-note">演示模式使用固定离线资料和规则回复，仅验证工程流程，不能作为真实研究或实验结果。</div>
       <label id="scenario-field" class="scenario-field">演示场景 <select id="mock-scenario"><option value="standard">正常完成</option><option value="revise">审查返工 → 重新分析</option><option value="search_more">证据不足 → 补充检索</option><option value="clarify">请求澄清 → 人工补充</option></select><small>显式演示夹具，用于观察真正的图分支；不会模拟成真实模型判断。</small></label>
       <details class="limits"><summary>预算与执行设置 <span>最多 12 次调用 · 120 秒</span></summary><div class="limit-grid"><label>最大总调用数<input id="max-calls" type="number" min="1" max="40" value="12"></label><label>最大迭代轮数<input id="max-iterations" type="number" min="1" max="8" value="3"></label><label>执行超时 / 秒<input id="timeout" type="number" min="5" max="600" value="120"></label></div><p>预算包括模型、搜索与重试；执行时间不计人工等待。</p></details>
@@ -32,6 +34,36 @@
       <div id="form-error" class="error" role="alert" hidden></div>
     </form>
     <div class="principles"><div><span>01</span><strong>过程可见</strong><p>实时查看节点状态与路径变化</p></div><div><span>02</span><strong>证据可查</strong><p>来源、片段与引用一一对应</p></div><div><span>03</span><strong>随时接手</strong><p>编辑计划、补充方向、恢复任务</p></div></div>
+  </section>
+  <section id="models-view" hidden>
+    <div class="eyebrow">MODEL CONNECTIONS</div><h1>模型配置</h1>
+    <p class="intro">在这里添加模型、测试连接和选择默认项。密钥只保留在当前服务内存中，重启后需要重新填写。</p>
+    <div id="legacy-history" class="mode-note" hidden><span id="legacy-history-count"></span><button type="button" id="claim-history" class="secondary">认领到当前浏览器</button><small>旧历史在数据库中保留。认领后仅当前浏览器会话可访问；真实任务仍需补充原模型密钥。</small></div>
+    <div class="model-layout"><form id="model-form" class="research-form">
+      <div class="panel-heading"><h2 id="model-form-title">添加模型</h2><button type="button" id="model-reset" class="secondary">新配置</button></div>
+      <div class="model-fields">
+        <label>名称<input id="model-name" required maxlength="100" placeholder="例如：我的 Qwen 研究模型"></label>
+        <label>提供商<select id="model-provider"><option value="qwen">Qwen / 通义千问</option><option value="kimi">Kimi / Moonshot</option><option value="deepseek">DeepSeek</option><option value="glm">GLM / 智谱</option><option value="openai">OpenAI</option><option value="anthropic">Anthropic</option><option value="custom">自定义</option></select></label>
+        <label>协议<select id="model-protocol"><option value="openai">OpenAI · Chat Completions</option><option value="anthropic">Anthropic · Messages</option></select></label>
+        <label>模型 ID<input id="model-id" required maxlength="200" value="qwen-plus"></label>
+        <label class="wide-field">接口基础地址<input id="model-url" type="url" required value="https://dashscope.aliyuncs.com/compatible-mode/v1"><small>填写到 /v1 等基础路径；请求会自动追加 chat/completions 或 messages。示例型号供填写参考，请以账号权限为准。</small></label>
+        <label class="wide-field">API 密钥<input id="model-key" type="password" autocomplete="new-password" maxlength="4096" placeholder="添加时填写；编辑时留空保留原凭证"><span class="checkbox key-toggle"><input id="show-model-key" type="checkbox"> 显示密钥</span></label>
+        <label>温度<input id="model-temperature" type="number" min="0" max="2" step="0.1" value="0"></label>
+        <label>最大输出 Tokens<input id="model-max-tokens" type="number" min="1" max="65536" value="2600"></label>
+        <label class="checkbox"><input id="model-supports-temperature" type="checkbox" checked> 发送温度参数</label>
+        <label class="checkbox"><input id="model-supports-tools" type="checkbox"> 模型支持原生工具调用</label>
+        <label>工具模式<select id="model-tool-mode"><option value="json">JSON 搜索词 · 兼容更多模型</option><option value="native">原生工具调用</option></select></label>
+        <label>输入价格 / USD 每百万 Tokens<input id="model-input-price" type="number" min="0" step="any" placeholder="选填，未知时留空"></label>
+        <label>输出价格 / USD 每百万 Tokens<input id="model-output-price" type="number" min="0" step="any" placeholder="选填，未知时留空"></label>
+      </div>
+      <p class="tab-intro">请按模型能力选择参数。不支持温度的推理模型应取消发送温度；不支持工具的型号使用 JSON 模式。</p>
+      <details><summary>已有本项目 .env 配置</summary><p class="tab-intro">升级前的环境凭证可显式认领到当前浏览器；认领后其他会话只能填写自己的密钥。</p><button type="button" class="secondary" id="import-env-model">认领当前提供商的环境配置</button></details>
+      <details id="restore-credential-section" hidden><summary>恢复较早任务的密钥</summary><label>原任务凭证 ID<input id="restore-credential-id" placeholder="从原任务「配置」中的 credential_id 复制"></label><button type="button" class="secondary" id="restore-credential">用上方密钥恢复原任务</button></details>
+      <div class="form-bottom"><span id="model-version" class="tab-intro">密钥不会写入任务、日志或导出。</span><button type="submit" id="save-model" class="primary">保存模型 →</button></div>
+      <div id="model-error" class="error" role="alert" hidden></div>
+    </form><div><section class="panel model-list-panel"><div class="panel-heading"><h2>我的模型</h2><span id="model-count">0 项</span></div><div id="model-list"></div></section>
+      <section class="panel model-list-panel"><h2>与 Benchmark Studio 联动</h2><p class="tab-intro">从模型卡片创建授权，只允许 Studio 调用所选模型。令牌有效 24 小时，可随时撤销；重启服务后失效。</p><div id="grant-once" hidden><label>授权令牌 · 仅本次展示<textarea id="grant-token" readonly rows="3"></textarea></label><p id="grant-config-id" class="tab-intro"></p><button type="button" id="copy-grant" class="secondary">复制令牌</button></div><div id="grant-list"></div></section>
+    </div></div>
   </section>
   <section id="task-view" hidden>
     <div class="task-heading"><div><div class="eyebrow" id="task-kicker">研究任务</div><h1 id="task-title">正在加载…</h1></div><span class="status-pill" id="task-status">载入中</span></div>

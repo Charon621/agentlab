@@ -1,6 +1,7 @@
 fastapi==0.143.0
 uvicorn==0.38.0
 httpx==0.28.1
+httpcore==1.0.9
 langgraph==1.2.15
 langgraph-checkpoint-sqlite==3.1.2
 python-dotenv==1.2.1

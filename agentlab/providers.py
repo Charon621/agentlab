@@ -14,7 +14,90 @@ class BudgetExceeded(RuntimeError):
 
 
 class ProviderError(RuntimeError):
-    pass
+    def __init__(self, message, category="provider_error"):
+        super().__init__(message)
+        self.category = category
+
+
+def safe_http_error(code):
+    category = {401: "authentication", 403: "permission", 404: "model_not_found", 429: "rate_limit"}.get(code, "http_error")
+    message = {401: "密钥无效或已过期", 403: "密钥没有模型权限", 404: "接口路径或模型不存在", 429: "额度不足或请求频率受限"}.get(code, "模型服务响应异常")
+    return ProviderError(f"模型接口 HTTP {code}：{message}。响应正文不会显示或保存。", category)
+
+
+def model_request(config, messages, tools=None):
+    """Canonical internal messages -> native vendor request (no secret fields)."""
+    model = config["model"]
+    temperature = config.get("temperature", 0)
+    tokens = config.get("max_tokens", 2600)
+    if config.get("protocol", "openai") == "openai":
+        body = {"model": model, "messages": messages,
+                "max_completion_tokens" if config.get("provider") == "openai" else "max_tokens": tokens}
+        if config.get("supports_temperature", True):
+            body["temperature"] = temperature
+        if tools is not None:
+            if not config.get("supports_tools", True):
+                raise ProviderError("当前模型未声明支持工具调用，请使用 JSON 工具模式。", "unsupported_capability")
+            body.update(tools=[SEARCH_TOOL], tool_choice=tools)
+        return "/chat/completions", body
+    system = "\n".join(m["content"] for m in messages if m["role"] == "system")
+    converted = []
+    for message in messages:
+        role = message["role"]
+        if role == "system":
+            continue
+        if role == "tool":
+            blocks = [{"type": "tool_result", "tool_use_id": message["tool_call_id"], "content": message["content"]}]
+            role = "user"
+        else:
+            blocks = [{"type": "text", "text": message["content"]}] if message.get("content") else []
+            for call in message.get("tool_calls", []):
+                blocks.append({"type": "tool_use", "id": call["id"], "name": call["function"]["name"],
+                               "input": json.loads(call["function"]["arguments"])})
+        if converted and converted[-1]["role"] == role:
+            converted[-1]["content"].extend(blocks)
+        else:
+            converted.append({"role": role, "content": blocks})
+    body = {"model": model, "system": system, "messages": converted, "max_tokens": tokens}
+    if config.get("supports_temperature", True):
+        body["temperature"] = temperature
+    if tools is not None:
+        if not config.get("supports_tools", True):
+            raise ProviderError("当前模型未声明支持工具调用，请使用 JSON 工具模式。", "unsupported_capability")
+        fn = SEARCH_TOOL["function"]
+        body["tools"] = [{"name": fn["name"], "description": fn["description"], "input_schema": fn["parameters"]}]
+        body["tool_choice"] = {"type": "tool", "name": "search_web"} if isinstance(tools, dict) else {"type": tools}
+    return "/messages", body
+
+
+def model_response(config, body):
+    if config.get("protocol", "openai") == "anthropic":
+        content = body["content"]
+        message = {"content": "".join(x["text"] for x in content if x.get("type") == "text"), "tool_calls": []}
+        for block in content:
+            if block.get("type") == "tool_use":
+                message["tool_calls"].append({"id": block["id"], "type": "function", "function": {
+                    "name": block["name"], "arguments": json.dumps(block["input"], ensure_ascii=False)}})
+        usage = body.get("usage") or {}
+        input_tokens = usage.get("input_tokens")
+        cached = [usage.get("cache_read_input_tokens", 0), usage.get("cache_creation_input_tokens", 0)]
+        if type(input_tokens) is int and all(type(t) is int and t >= 0 for t in cached):
+            input_tokens += sum(cached)
+        else:
+            input_tokens = None
+        return message, input_tokens, usage.get("output_tokens")
+    usage = body.get("usage") or {}
+    return body["choices"][0]["message"], usage.get("prompt_tokens"), usage.get("completion_tokens")
+
+
+def redact_response(value, key):
+    if isinstance(value, str):
+        return value.replace(key, "[REDACTED]") if key else value
+    if isinstance(value, dict):
+        return {redact_response(k, key): redact_response(v, key) for k, v in value.items()}
+    if isinstance(value, list):
+        return [redact_response(v, key) for v in value]
+    return value
 
 
 def public_url(url: str) -> bool:
@@ -49,8 +132,9 @@ SEARCH_TOOL = {"type": "function", "function": {"name": "search_web",
 
 
 class ModelClient:
-    def __init__(self, state, event, guard):
+    def __init__(self, state, event, guard, credential_resolver=None, transport=None, allow_fixture=False):
         self.state, self.event, self.guard = state, event, guard
+        self.credential_resolver, self.transport, self.allow_fixture = credential_resolver, transport, allow_fixture
 
     def call(self, role, payload, schema, _messages=None, _tools=None, _raw=False):
         s = self.state
@@ -62,48 +146,48 @@ class ModelClient:
         if s.get("provider_config", {}).get("tool_mode") == "native" and role in {"searcher", "single"} and _messages is None:
             return self.native(role, payload, schema)
         provider = s["provider"].upper()
-        key = os.environ.get(provider + "_API_KEY", "")
+        frozen = s.get("provider_config", {})
+        key = self.credential_resolver(s.get("owner_id"), frozen) if self.credential_resolver else os.environ.get(provider + "_API_KEY", "")
         if not key:
             raise ProviderError(f"未配置 {provider}_API_KEY。请选择演示模式，或在本项目 .env 中配置。")
-        defaults = {"QWEN": ("https://dashscope.aliyuncs.com/compatible-mode/v1", "qwen-plus"),
-                    "KIMI": ("https://api.moonshot.cn/v1", "moonshot-v1-8k")}
-        frozen = s.get("provider_config", {})
-        base = frozen.get("base_url", os.getenv(provider + "_BASE_URL", defaults[provider][0])).rstrip("/")
-        model = frozen.get("model", os.getenv(provider + "_MODEL", defaults[provider][1]))
-        if not base.startswith("https://"):
-            raise ProviderError("模型接口地址必须使用 HTTPS。")
+        from .configuration import PRESETS
+        from .network import PublicHTTPTransport, validate_model_url
+        base = validate_model_url(frozen.get("base_url", os.getenv(provider + "_BASE_URL", PRESETS[s["provider"]][0])), self.allow_fixture)
+        config = {**frozen, "provider": s["provider"], "model": frozen.get("model", PRESETS[s["provider"]][1])}
+        messages = _messages or [{"role": "system", "content": SYSTEM + "\n当前角色：" + role + "\nJSON 结构：" + schema},
+                                  {"role": "user", "content": json.dumps(payload, ensure_ascii=False)}]
+        path, request_body = model_request(config, messages, _tools)
+        headers = {"x-api-key": key, "anthropic-version": "2023-06-01"} if config.get("protocol") == "anthropic" else {"Authorization": "Bearer " + key}
         for attempt in range(2):
             self.guard(s, model=True)
             s["calls"] += 1
             s["model_calls"] += 1
             try:
                 remaining = max(0.1, self.guard(s))
-                with httpx.Client(timeout=min(30, remaining), follow_redirects=False) as client:
-                    request_body = {
-                        "model": model, "temperature": frozen.get("temperature", 0),
-                        "messages": _messages or [{"role": "system", "content": SYSTEM + "\n当前角色：" + role + "\nJSON 结构：" + schema},
-                                     {"role": "user", "content": json.dumps(payload, ensure_ascii=False)}],
-                        "max_tokens": 2600,
-                    }
-                    if _tools is not None:
-                        request_body.update(tools=[SEARCH_TOOL], tool_choice=_tools)
-                    response = client.post(base + "/chat/completions", headers={"Authorization": "Bearer " + key}, json=request_body)
+                with httpx.Client(timeout=min(30, remaining), follow_redirects=False, trust_env=False,
+                                  transport=self.transport or PublicHTTPTransport()) as client:
+                    response = client.post(base + path, headers=headers, json=request_body)
+                if response.is_redirect:
+                    raise ProviderError("模型接口返回跳转，已阻止跟随重定向。请填写最终 HTTPS 接口地址。", "redirect_blocked")
                 response.raise_for_status()
-                body = response.json()
+                body = redact_response(response.json(), key)
                 s.setdefault("response_models", []).append({"model": body.get("model"), "system_fingerprint": body.get("system_fingerprint")})
-                usage = body.get("usage") or {}
-                in_tokens = usage.get("prompt_tokens")
-                out_tokens = usage.get("completion_tokens")
-                complete = isinstance(in_tokens, int) and isinstance(out_tokens, int) and in_tokens >= 0 and out_tokens >= 0
+                message, in_tokens, out_tokens = model_response(config, body)
+                if not isinstance(message, dict) or not ({"content", "tool_calls"} & message.keys()):
+                    raise ValueError("invalid message")
+                complete = type(in_tokens) is int and type(out_tokens) is int and in_tokens >= 0 and out_tokens >= 0
+                in_tokens = in_tokens if type(in_tokens) is int and in_tokens >= 0 else None
+                out_tokens = out_tokens if type(out_tokens) is int and out_tokens >= 0 else None
                 s["input_tokens"] += int(in_tokens or 0)
                 s["output_tokens"] += int(out_tokens or 0)
                 s["usage_complete"] = s["usage_complete"] and complete
                 pi, po = frozen.get("input_price", ""), frozen.get("output_price", "")
-                if pi and po and s["usage_complete"]:
+                cached_usage = config.get("protocol") == "anthropic" and any((body.get("usage") or {}).get(k, 0) for k in ("cache_read_input_tokens", "cache_creation_input_tokens"))
+                if pi is not None and pi != "" and po is not None and po != "" and s["usage_complete"] and not cached_usage and s.get("cost_complete", True):
                     s["cost_usd"] = (s.get("cost_usd") or 0) + (int(in_tokens or 0) * float(pi) + int(out_tokens or 0) * float(po)) / 1e6
                 else:
                     s["cost_usd"] = None
-                message = body["choices"][0]["message"]
+                    s["cost_complete"] = False
                 if _raw:
                     return message
                 content = message["content"].strip()
@@ -112,22 +196,30 @@ class ModelClient:
                 if not isinstance(parsed, dict):
                     raise ValueError("需要 JSON 对象")
                 return parsed
-            except (httpx.TimeoutException, httpx.NetworkError) as exc:
+            except (httpx.TimeoutException, httpx.NetworkError, httpx.RemoteProtocolError) as exc:
                 s["usage_complete"] = False
                 s["cost_usd"] = None
+                s["cost_complete"] = False
                 self.event(role, "retry", "模型网络错误，执行有预算上限的重试。")
                 if attempt == 1:
-                    raise ProviderError("模型连接失败或超时；检查网络后可从检查点重试。") from exc
+                    category = "timeout" if isinstance(exc, httpx.TimeoutException) else "network"
+                    raise ProviderError("模型请求超时。" if category == "timeout" else "模型网络连接失败。", category) from None
             except httpx.HTTPStatusError as exc:
                 s["usage_complete"] = False
                 s["cost_usd"] = None
+                s["cost_complete"] = False
                 code = exc.response.status_code
                 if code in {429, 500, 502, 503, 504} and attempt == 0:
                     self.event(role, "retry", f"模型接口 HTTP {code}，重试一次。")
                     continue
-                raise ProviderError(f"模型接口 HTTP {code}；请检查额度、模型名与密钥权限。响应正文不写入日志。") from exc
-            except (KeyError, TypeError, ValueError) as exc:
-                raise ProviderError("模型返回格式不符合角色 JSON 契约；可重试或调整配置。") from exc
+                raise safe_http_error(code) from None
+            except httpx.HTTPError:
+                s["usage_complete"] = False
+                s["cost_usd"] = None
+                s["cost_complete"] = False
+                raise ProviderError("模型网络或 HTTP 协议连接失败。", "network") from None
+            except (KeyError, TypeError, ValueError, AttributeError, IndexError) as exc:
+                raise ProviderError("模型返回格式不符合角色 JSON 契约；可重试或调整配置。", "invalid_response") from None
 
     def native(self, role, payload, schema):
         """Actual OpenAI-compatible tool_calls -> real search -> role=tool response."""
@@ -150,17 +242,25 @@ class ModelClient:
                     raise ProviderError("原生工具调用后的最终回复未遵循 JSON 契约。") from exc
             if round_index == 3 or len(tool_calls) > 2:
                 raise ProviderError("原生工具调用超过每节点 3 轮 / 每轮 2 个工具的上限。")
-            messages.append({"role": "assistant", "content": message.get("content"), "tool_calls": tool_calls})
+            call_ids = [call.get("id") for call in tool_calls if isinstance(call, dict)]
+            if len(call_ids) != len(tool_calls) or any(not isinstance(i, str) or not i for i in call_ids) or len(set(call_ids)) != len(call_ids):
+                raise ProviderError("模型工具调用标识无效或重复。", "invalid_response")
+            validated = []
             for tool_call in tool_calls:
                 try:
                     fn = tool_call["function"]
                     args = json.loads(fn["arguments"])
+                    if not isinstance(args, dict):
+                        raise ValueError("invalid tool args")
                     query = args.get("query")
                     call_id = tool_call["id"]
-                    if fn["name"] != "search_web" or not isinstance(query, str) or not 1 <= len(query.strip()) <= 250 or not isinstance(call_id, str):
+                    if fn["name"] != "search_web" or not isinstance(args, dict) or set(args) != {"query"} or not isinstance(query, str) or not 1 <= len(query.strip()) <= 250 or not isinstance(call_id, str) or not call_id:
                         raise ValueError("invalid tool call")
                 except (ValueError, KeyError, TypeError) as exc:
-                    raise ProviderError("模型请求了不受支持的工具或无效参数。仅允许 search_web(query)。") from exc
+                    raise ProviderError("模型请求了不受支持的工具或无效参数。仅允许 search_web(query)。") from None
+                validated.append((query, call_id))
+            messages.append({"role": "assistant", "content": message.get("content"), "tool_calls": tool_calls})
+            for query, call_id in validated:
                 self.event(role, "tool_call", "原生 search_web：" + query)
                 def charge():
                     remaining = self.guard(s, tool=True)

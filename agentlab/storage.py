@@ -62,8 +62,10 @@ class Store:
         result["result"] = json.loads(result["result"]) if result["result"] else None
         return result
 
-    def list(self):
+    def list(self, owner_id=None):
         with self.connect() as db:
+            if owner_id is not None:
+                return [dict(r) for r in db.execute("SELECT id,question,status,created,updated,error FROM tasks WHERE json_extract(request,'$.owner_id')=? ORDER BY created DESC LIMIT 200", (owner_id,))]
             return [dict(r) for r in db.execute("SELECT id,question,status,created,updated,error FROM tasks ORDER BY created DESC LIMIT 200")]
 
     def event(self, task_id, node, status, detail):
@@ -90,7 +92,10 @@ class Store:
                 result[row["kind"]] = row["n"]
         return result
 
-    def find_benchmark(self, external_id, fingerprint):
+    def find_benchmark(self, external_id, fingerprint, owner_id=None):
         with self.connect() as db:
+            if owner_id is not None:
+                row = db.execute("SELECT id FROM tasks WHERE json_extract(request,'$.owner_id')=? AND json_extract(request,'$.external_task_id')=? AND json_extract(request,'$.request_fingerprint')=? ORDER BY created DESC LIMIT 1", (owner_id, external_id, fingerprint)).fetchone()
+                return self.get(row[0]) if row else None
             rows = db.execute("SELECT id FROM tasks WHERE json_extract(request,'$.external_task_id')=? AND json_extract(request,'$.request_fingerprint')=? ORDER BY created DESC LIMIT 1", (external_id, fingerprint)).fetchall()
         return self.get(rows[0]["id"]) if rows else None

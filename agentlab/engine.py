@@ -3,6 +3,7 @@ import hashlib
 import os
 import sqlite3
 import time
+import threading
 import uuid
 from contextlib import contextmanager
 from typing import Any, TypedDict
@@ -13,6 +14,7 @@ from langgraph.errors import GraphInterrupt
 from .providers import ModelClient, SearchClient, BudgetExceeded, ProviderError, verify_citations
 
 os.environ.setdefault("LANGGRAPH_STRICT_MSGPACK", "true")
+_checkpoint_setup_lock = threading.RLock()
 
 
 class ResearchState(TypedDict, total=False):
@@ -42,11 +44,13 @@ class ResearchState(TypedDict, total=False):
     output_tokens: int
     usage_complete: bool
     cost_usd: float | None
+    cost_complete: bool
     iteration: int
     elapsed_ms: float
     route: str
     stop_reason: str
     error: str
+    error_category: str
     failed_node: str
     clarification: str
     recovered: bool
@@ -56,20 +60,29 @@ class ResearchState(TypedDict, total=False):
     research_instructions: str
     temperature: float
     mock_scenario: str
+    owner_id: str
+    model_config_id: str | None
+    max_tokens: int
 
 
 class Engine:
-    def __init__(self, store, model_factory=ModelClient, search_factory=SearchClient):
+    def __init__(self, store, model_factory=ModelClient, search_factory=SearchClient, credential_guard=None):
         self.store, self.model_factory, self.search_factory = store, model_factory, search_factory
+        self.credential_guard = credential_guard
         self.deadline = None
         self.running_id = None
 
     @contextmanager
     def graph(self, task_id):
         conn = sqlite3.connect(self.store.checkpoints, check_same_thread=False, timeout=15)
-        conn.execute("PRAGMA journal_mode=WAL")
         try:
-            yield self.build(SqliteSaver(conn)), {"configurable": {"thread_id": task_id}, "recursion_limit": 100}
+            # Polling and a freshly scheduled worker may first open the same file.
+            # Initialize SQLite/checkpointer schema once at a time before either reads.
+            with _checkpoint_setup_lock:
+                conn.execute("PRAGMA journal_mode=WAL")
+                saver = SqliteSaver(conn)
+                saver.setup()
+            yield self.build(saver), {"configurable": {"thread_id": task_id}, "recursion_limit": 100}
         finally:
             conn.close()
 
@@ -77,6 +90,9 @@ class Engine:
         self.store.event(self.running_id, node, status, detail)
 
     def guard(self, state, model=False, tool=False):
+        if self.credential_guard and state["execution_mode"] == "live":
+            self.bind_configuration(state)
+            self.credential_guard(state.get("owner_id"), state.get("provider_config", {}))
         task = self.store.get(state["task_id"])
         if task and task["cancel_requested"]:
             raise BudgetExceeded("用户已停止任务")
@@ -98,7 +114,18 @@ class Engine:
             self.store.attempt(state["task_id"], kind)
         return remaining
 
+    def bind_configuration(self, state):
+        # Explicitly claimed legacy checkpoints predate session and credential IDs.
+        # Bind only their missing auth metadata from the owner's persisted request.
+        if not state.get("owner_id"):
+            request = (self.store.get(state["task_id"]) or {}).get("request", {})
+            if request.get("owner_id"):
+                state["owner_id"] = request["owner_id"]
+                if not state.get("provider_config", {}).get("credential_id") and request.get("provider_config", {}).get("credential_id"):
+                    state["provider_config"] = dict(request["provider_config"])
+
     def model(self, state):
+        self.bind_configuration(state)
         return self.model_factory(state, self.event, self.guard)
 
     def payload(self, s):
@@ -129,7 +156,7 @@ class Engine:
                 s.update(route="finalize", stop_reason=str(exc), status="cancelled" if str(exc).startswith("用户已停止") else "limited")
                 self.event(node, "limited", str(exc))
             except ProviderError as exc:
-                s.update(route="recover", error=str(exc), failed_node=node)
+                s.update(route="recover", error=str(exc), failed_node=node, error_category=exc.category)
                 self.event(node, "error", str(exc))
             except Exception:
                 # No raw response, request or environment text is written to the task.
@@ -183,7 +210,7 @@ class Engine:
                 "route": "searcher", "status": "running"}
 
     def recover(self, s):
-        answer = interrupt({"kind": "error", "message": s["error"], "failed_node": s["failed_node"],
+        answer = interrupt({"kind": "error", "message": s["error"], "category": s.get("error_category", "provider_error"), "failed_node": s["failed_node"],
                             "plan": s.get("plan", []), "question": s["question"]})
         direction = str(answer.get("direction") or "").strip()
         return {"route": s["failed_node"], "error": "", "direction": direction or s.get("direction", ""),
@@ -305,19 +332,21 @@ class Engine:
     @staticmethod
     def initial(task_id, request):
         provider = request["provider"].upper()
-        defaults = {"QWEN": ("https://dashscope.aliyuncs.com/compatible-mode/v1", "qwen-plus"), "KIMI": ("https://api.moonshot.cn/v1", "moonshot-v1-8k")}
+        from .configuration import PRESETS
+        defaults = {p.upper(): values for p, values in PRESETS.items()}
         frozen = {"provider": request["provider"], "base_url": os.getenv(provider + "_BASE_URL", defaults[provider][0]),
                   "model": os.getenv(provider + "_MODEL", defaults[provider][1]), "temperature": request.get("temperature", 0),
+                  "protocol": defaults[provider][2], "max_tokens": request.get("max_tokens", 2600), "supports_tools": True,
                   "input_price": os.getenv(provider + "_INPUT_PRICE_PER_MILLION", ""),
                   "output_price": os.getenv(provider + "_OUTPUT_PRICE_PER_MILLION", ""),
                   "tool_mode": os.getenv("AGENTLAB_TOOL_MODE", "json"),
                   "search": os.getenv("AGENTLAB_SEARCH", "wikipedia")}
-        frozen = request.get("provider_config", frozen)
+        frozen = dict(request.get("provider_config", frozen))
         frozen["research_instructions_sha256"] = hashlib.sha256(request.get("research_instructions", "").encode()).hexdigest()
         return {**request, "provider_config": frozen, "response_models": [], "task_id": task_id, "direction": "", "plan": [], "queries": [request["question"][:250]],
                 "searched": [], "sources": [], "draft": "", "report": "", "calls": 0, "model_calls": 0,
                 "simulated_calls": 0, "search_calls": 0, "input_tokens": 0, "output_tokens": 0,
-                "usage_complete": True, "cost_usd": None, "iteration": 1, "elapsed_ms": 0., "status": "running",
+                "usage_complete": True, "cost_usd": None, "cost_complete": True, "iteration": 1, "elapsed_ms": 0., "status": "running",
                 "route": "", "stop_reason": "", "error": "", "recovered": False}
 
     def run(self, task_id, resume=None, retry=False):
@@ -375,4 +404,5 @@ def benchmark_result(task, state, store):
                         "usage_complete": token_known},
             "trace": [{"node": e["node"], "status": e["status"], "detail": e["detail"]} for e in store.events(task["id"])],
             "citation_check": state.get("citation_check", {}), "status": task["status"],
+            "model_config": state.get("provider_config", task["request"].get("provider_config", {})),
             "warning": "离线固定演示；不能当作模型能力或架构实验结论。" if mock else "引用映射核验不等于事实正确性。"}
