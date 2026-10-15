@@ -26,8 +26,11 @@ import httpx
 from pydantic import ValidationError
 
 ROOT = Path(__file__).resolve().parent.parent
-# Only this project's explicit .env; never discover a parent/sibling .env.
-load_dotenv(ROOT / ".env", override=False)
+
+
+def load_project_env():
+    """Load only this project's .env for production startup. Never on import."""
+    load_dotenv(ROOT / ".env", override=False)
 
 
 def create_app(data_dir=None, model_transport=None, allow_private_fixture=False):
@@ -50,7 +53,7 @@ def create_app(data_dir=None, model_transport=None, allow_private_fixture=False)
         yield
         executor.shutdown(wait=False, cancel_futures=True)
 
-    app = FastAPI(title="AgentLab 研究工作台", version="1.0.0", lifespan=lifespan)
+    app = FastAPI(title="AgentLab 研究工作台", version="1.1.0", lifespan=lifespan)
     app.add_middleware(TrustedHostMiddleware, allowed_hosts=["localhost", "127.0.0.1", "[::1]", "testserver"])
     app.state.store = store
     app.state.models = registry
@@ -96,6 +99,8 @@ def create_app(data_dir=None, model_transport=None, allow_private_fixture=False)
                 active.discard(task_id)
 
     def schedule(task_id, resume=None):
+        if store.get(task_id).get("archived_at"):
+            raise HTTPException(409, "请先从回收站恢复任务")
         with lock:
             if task_id in active:
                 raise HTTPException(409, "任务已经运行中")
@@ -132,14 +137,14 @@ def create_app(data_dir=None, model_transport=None, allow_private_fixture=False)
 
     @app.get("/api/health")
     def health(request: Request):
-        return {"status": "ok", "app": "agentlab", "schema_version": "1.0", "version": "1.0.0",
+        return {"status": "ok", "app": "agentlab", "schema_version": "1.0", "version": "1.1.0",
                 "providers": {p: {"configured": any(c["provider"] == p and c["configured"] for c in registry.list(request.state.owner_id)["models"]), "model": values[1]}
                               for p, values in PRESETS.items()},
                 "search": os.getenv("AGENTLAB_SEARCH", "wikipedia"), "live_calls_require_explicit_selection": True}
 
     @app.get("/api/tasks")
-    def tasks(request: Request):
-        return store.list(request.state.owner_id)
+    def tasks(request: Request, archived: bool = False):
+        return store.list(request.state.owner_id, archived=archived)
 
     @app.post("/api/tasks", status_code=201)
     def create(req: TaskRequest, request: Request):
@@ -181,6 +186,21 @@ def create_app(data_dir=None, model_transport=None, allow_private_fixture=False)
         store.update(task_id, cancel=1)
         store.event(task_id, "workflow", "stopping", "已请求停止，当前有超时限制的网络调用结束后生效。")
         return {"status": "stopping"}
+
+    @app.delete("/api/tasks/{task_id}")
+    def delete_task(task_id: str, request: Request):
+        task = get_task(task_id, request.state.owner_id)
+        if task["status"] in {"running", "queued"}:
+            raise HTTPException(409, "任务正在运行，请先停止再删除")
+        result = store.delete(task_id)
+        if not result["deleted"]:
+            raise HTTPException(404, "任务不存在")
+        return result
+
+    @app.post("/api/tasks/{task_id}/restore")
+    def restore_task(task_id: str, request: Request):
+        get_task(task_id, request.state.owner_id)
+        return {"restored": store.restore(task_id)}
 
     @app.get("/api/tasks/{task_id}/events")
     async def events(task_id: str, request: Request, after: int = 0):
@@ -232,7 +252,7 @@ def create_app(data_dir=None, model_transport=None, allow_private_fixture=False)
         payload = TaskRequest(question=req.question, mode=req.mode, execution_mode=req.execution_mode, provider=req.provider,
                               review_plan=False, max_calls=req.max_calls, timeout_seconds=req.timeout_seconds,
                               research_instructions=req.research_instructions, temperature=req.temperature,
-                              model_config_id=req.model_config_id, max_tokens=req.max_tokens).model_dump()
+                              model_config_id=req.model_config_id, max_tokens=req.max_tokens,search_snapshot=req.search_snapshot).model_dump()
         payload["owner_id"] = owner
         config_id = req.model_config_id or (registry.list(owner)["default_model_config_id"] if req.execution_mode == "live" else None)
         if config_id:
@@ -267,6 +287,17 @@ def create_app(data_dir=None, model_transport=None, allow_private_fixture=False)
     @app.get("/api/models")
     def models(request: Request):
         return registry.list(request.state.owner_id)
+
+    @app.get('/api/environment/conflict')
+    def environment_conflict(request: Request):
+        conflicts=registry.env_claim_conflicts()
+        return {'count':len(conflicts),'can_resolve':request.state.owner_id in conflicts}
+
+    @app.post('/api/environment/conflict/resolve')
+    async def resolve_environment_conflict(request: Request):
+        body=await request.json()
+        if not isinstance(body,dict) or body.get('confirm') is not True:raise HTTPException(422,'需要明确确认本机会话归属修复')
+        return registry.resolve_env_conflict(request.state.owner_id)
 
     @app.get("/api/history/unclaimed")
     def unclaimed_history():
@@ -311,7 +342,7 @@ def create_app(data_dir=None, model_transport=None, allow_private_fixture=False)
         key = os.getenv(provider.upper() + "_API_KEY")
         if not key:
             raise HTTPException(422, "本项目环境中没有该提供商密钥")
-        registry.claim_env(request.state.owner_id, provider)
+        registry.claim_env(request.state.owner_id)
         base, model, protocol = PRESETS[provider]
         try:
             req = ModelConfigRequest(name=provider + " / 项目环境", provider=provider, protocol=protocol,
@@ -321,7 +352,10 @@ def create_app(data_dir=None, model_transport=None, allow_private_fixture=False)
                 output_price=os.getenv(provider.upper() + "_OUTPUT_PRICE_PER_MILLION") or None)
         except ValidationError:
             raise HTTPException(422, "本项目环境配置无效，请核对模型、工具模式和价格。") from None
-        return registry.save(request.state.owner_id, validate_config(req))
+        values = validate_config(req)
+        values["credential_source"] = "env_import"
+        values["env_provider"] = provider
+        return registry.save(request.state.owner_id, values)
 
     @app.post("/api/models/{config_id}/test")
     def test_model(config_id: str, request: Request):
@@ -330,7 +364,8 @@ def create_app(data_dir=None, model_transport=None, allow_private_fixture=False)
              "owner_id": request.state.owner_id, "calls": 0, "model_calls": 0, "input_tokens": 0, "output_tokens": 0, "usage_complete": True}
         started = time.monotonic()
         try:
-            model_factory(s, lambda *args: None, lambda *args, **kwargs: 10).call("connection", {"instruction": "Reply OK."}, "{}", _raw=True)
+            # 连接测试也要给慢模型留读响应时间，否则会误报超时。
+            model_factory(s, lambda *args: None, lambda *args, **kwargs: 45).call("connection", {"instruction": "Reply OK."}, "{}", _raw=True)
             result = {"ok": True, "category": "connected", "message": "模型接口已返回有效响应。该测试会产生一次最小模型请求。", "model": (s.get("response_models") or [{}])[-1].get("model")}
         except ProviderError as exc:
             result = {"ok": False, "category": exc.category, "message": str(exc), "model": config["model"]}

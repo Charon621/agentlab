@@ -29,7 +29,11 @@ def model_request(config, messages, tools=None):
     """Canonical internal messages -> native vendor request (no secret fields)."""
     model = config["model"]
     temperature = config.get("temperature", 0)
-    tokens = config.get("max_tokens", 2600)
+    tokens = config.get("max_tokens", 8192)
+    # Kimi K2/K3 只接受 temperature=1；界面可改，请求侧强制对齐。
+    provider = config.get("provider") or ""
+    if provider == "kimi" or str(model).startswith("kimi-"):
+        temperature = 1
     if config.get("protocol", "openai") == "openai":
         body = {"model": model, "messages": messages,
                 "max_completion_tokens" if config.get("provider") == "openai" else "max_tokens": tokens}
@@ -164,7 +168,9 @@ class ModelClient:
             s["model_calls"] += 1
             try:
                 remaining = max(0.1, self.guard(s))
-                with httpx.Client(timeout=min(30, remaining), follow_redirects=False, trust_env=False,
+                # 连接快速失败，读超时跟随剩余预算；30s 上限会让 analyst / 推理模型长输出误超时。
+                with httpx.Client(timeout=httpx.Timeout(min(180.0, remaining), connect=10.0),
+                                  follow_redirects=False, trust_env=False,
                                   transport=self.transport or PublicHTTPTransport()) as client:
                     response = client.post(base + path, headers=headers, json=request_body)
                 if response.is_redirect:
@@ -269,6 +275,7 @@ class ModelClient:
                     return remaining
                 search = SearchClient(s["execution_mode"], self.event, timeout=self.guard(s))
                 search.engine = s.get("provider_config", {}).get("search", "wikipedia")
+                search.snapshot = s.get("provider_config", {}).get("search_snapshot")
                 search.before_attempt = charge
                 results = search.search(query)
                 found = list(s.get("sources", []))
@@ -314,6 +321,12 @@ class SearchClient:
         self.mode, self.event, self.timeout = mode, event or (lambda *args: None), timeout
 
     def search(self, query):
+        if getattr(self,"snapshot",None) is not None:
+            from .search_replay import replay
+            if hasattr(self,"before_attempt"):self.before_attempt()
+            result=replay(self.snapshot,query)
+            self.event('searcher','cache_hit' if result else 'cache_miss', '固定检索快照；命中' if result else '固定检索快照未命中；禁止联网回退')
+            return result
         if self.mode == "mock":
             if hasattr(self, "before_attempt"):
                 self.before_attempt()

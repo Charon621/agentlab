@@ -2,6 +2,10 @@
 import sys
 import time
 from pathlib import Path
+
+# Subprocess isolation: purge credentials, disable dotenv, block external sockets.
+from tests import isolation  # noqa: F401
+
 from agentlab.engine import Engine
 from agentlab.models import TaskRequest
 from agentlab.providers import ModelClient

@@ -30,6 +30,8 @@ class Store:
                 );
                 CREATE INDEX IF NOT EXISTS attempts_task ON call_attempts(task_id);
             """)
+            if "archived_at" not in {r[1] for r in db.execute("PRAGMA table_info(tasks)")}:
+                db.execute("ALTER TABLE tasks ADD COLUMN archived_at REAL")
 
     def connect(self):
         db = sqlite3.connect(self.path, timeout=15)
@@ -62,11 +64,38 @@ class Store:
         result["result"] = json.loads(result["result"]) if result["result"] else None
         return result
 
-    def list(self, owner_id=None):
+    def list(self, owner_id=None, archived=False):
         with self.connect() as db:
+            condition = "archived_at IS NOT NULL" if archived else "archived_at IS NULL"
+            args = []
             if owner_id is not None:
-                return [dict(r) for r in db.execute("SELECT id,question,status,created,updated,error FROM tasks WHERE json_extract(request,'$.owner_id')=? ORDER BY created DESC LIMIT 200", (owner_id,))]
-            return [dict(r) for r in db.execute("SELECT id,question,status,created,updated,error FROM tasks ORDER BY created DESC LIMIT 200")]
+                condition += " AND json_extract(request,'$.owner_id')=?"
+                args.append(owner_id)
+            return [dict(r) for r in db.execute(f"SELECT id,question,status,created,updated,error,archived_at FROM tasks WHERE {condition} ORDER BY created DESC LIMIT 200", args)]
+
+    def delete(self, task_id):
+        with self.connect() as db:
+            cur = db.execute("UPDATE tasks SET archived_at=?,updated=? WHERE id=? AND archived_at IS NULL", (time.time(),time.time(),task_id))
+        return {"deleted": cur.rowcount > 0, "archived": True, "recoverable": True, "checkpoint_cleaned": False}
+
+    def restore(self, task_id):
+        with self.connect() as db:
+            return db.execute("UPDATE tasks SET archived_at=NULL,updated=? WHERE id=? AND archived_at IS NOT NULL", (time.time(),task_id)).rowcount > 0
+
+    def _delete_checkpoint(self, task_id):
+        """Delete checkpoint data. Returns True on success, False on failure."""
+        try:
+            with sqlite3.connect(self.checkpoints, timeout=15) as db:
+                for table in ("writes", "checkpoints"):
+                    try:
+                        db.execute(f"DELETE FROM {table} WHERE thread_id=?", (task_id,))
+                    except sqlite3.OperationalError as exc:
+                        if "no such table" not in str(exc):
+                            raise
+                db.commit()
+            return True
+        except sqlite3.Error:
+            return False
 
     def event(self, task_id, node, status, detail):
         with self.connect() as db:

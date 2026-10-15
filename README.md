@@ -1,5 +1,7 @@
 # AgentLab · 可观察、可恢复的多智能体研究工作台
 
+> 2026-10-15 修复说明与当前本机验收：[使用、恢复和验收记录](docs/验收与恢复_2026-10-15.md)。历史章节中的测试数字保留为当时快照；真实云端模型验证仍待具体授权。
+
 把一个研究问题交给规划、检索、分析、审查四个角色；观察真正的条件分支，审核和编辑计划，查看带来源的报告。独立 FastAPI 项目，默认端口 **8811**，与其他项目没有数据库、虚拟环境或运行依赖共享。
 
 ## 先运行一次
@@ -49,7 +51,7 @@ python -m venv .venv
 
 密钥只放在后端内存；浏览器不写 localStorage，数据库、LangGraph 检查点、日志和导出均不保存密钥。服务重启后，模型定义与任务仍在，需要在同一浏览器重新填写密钥。较早任务使用的凭证 ID 可在原任务「配置」中查看，再在模型表单「恢复较早任务的密钥」补回。删除密钥后，恢复任务会以 `credential_missing` 暂停，不会换用新默认模型、其他版本密钥或环境密钥；已经发出的请求需要等当前有超时限制的调用结束。
 
-原 `.env` 配置仍兼容：应用只加载**本项目目录内**的 `.env`，不会搜索父目录或兄弟项目。网页「已有本项目 .env 配置」可显式认领当前提供商；环境凭证绑定一个持久本机会话，其他会话不能自动借用。首次认领旧历史也会将旧环境配置权限绑定到该会话；新网页配置无需修改任何文件。
+原 `.env` 配置仍兼容：应用只加载**本项目目录内**的 `.env`，不会搜索父目录或兄弟项目。普通 import 与测试不读取 `.env`；仅 `run.py` 正式启动路径加载。网页「已有本项目 .env 配置」可显式认领环境凭证；环境凭证绑定一个持久本机会话（覆盖所有提供商），其他会话不能借用。模型凭证来源显式保存为 `web` / `env_import` / `legacy_unclassified`，不从 provider 名称推断。
 
 - Qwen 默认示例接口为 `https://dashscope.aliyuncs.com/compatible-mode/v1`。中国、新加坡、美国或专属工作空间的地址和密钥不同，应以账号所在地域的官方文档为准。
 - Kimi 默认示例接口为 `https://api.moonshot.cn/v1`。示例模型名可覆盖；这些是兼容性示例，**不宣称是最新模型**。
@@ -188,21 +190,60 @@ flowchart TD
 
 脚本记录所有原始报告、来源、配置、模式、调用统计与难度分组汇总。没有真实运行就没有真实实验结论；mock 汇总不会生成「准确率」或「多 Agent 更好」的假结论。更全面的模型×提示词×样本评测可通过 LLM Benchmark Studio 的 AgentLab provider 连接本服务。
 
+## 界面设计
+
+`web/` 为无构建步骤的中文研究工作台：深黑 / 深墨绿底色配青绿强调色，首屏以山脉与等高线地形图形表达研究探索的品牌视觉；左侧固定导航，研究问题输入区为创建页视觉中心，高级参数默认折叠。执行页用时间线节点展示 planner / searcher / analyst / reviewer 的真实状态（未开始 / 执行中 / 已完成 / 等待人工 / 失败，含耗时与事件明细），全部来自后端事件流，没有前端模拟进度；人工审核面板直接嵌入工作流。报告按标题层级、引用角标、来源列表与代码块排版，支持 Markdown / JSON 导出。界面适配桌面、平板与手机宽度，支持键盘焦点与系统减少动态设置。
+
 ## 验证与开发
 
 ```bash
+# 默认测试入口：禁止 dotenv、清除继承凭证、阻断外部网络
 .venv/Scripts/python -m pytest -q
 ```
 
-保留原 33 项工程测试，新增多供应商 CRUD、OpenAI / Anthropic 原生协议与工具循环、错误类别与回显秘密清洗、cookie / 模型 / 任务 / SSE / 导出 / 父任务 / benchmark owner 隔离、重启后定义保留与密钥丢失、冻结原版本 / 凭证恢复、DNS 全答案校验 / IP 固定连接、显式夹具开关、缓存费用未知保持、旧历史显式认领和联动版本漂移拒绝。还覆盖两类真实进程恢复：
+测试隔离由 `tests/isolation.py` 提供：导入应用前清理全部模型 Key、搜索 Key、grant、代理和 live 开关；仅修改子进程环境，不改用户文件或系统环境变量。默认阻断未注册的外部连接（包括子进程恢复测试），本地夹具允许 loopback 服务（测试统一使用隔离目录与动态端口）。父进程放置多个假环境 Key 时，子测试仍不加载 `.env`，且任何未注入的模型/搜索请求立刻失败。
+
+真实联网测试独立命名和显式 opt-in，不纳入默认 `pytest`、CI、安装自检或模型列表加载。
+
+保留原工程测试，新增多供应商 CRUD、OpenAI / Anthropic 原生协议与工具循环、错误类别与回显秘密清洗、cookie / 模型 / 任务 / SSE / 导出 / 父任务 / benchmark owner 隔离、重启后定义保留与密钥丢失、冻结原版本 / 凭证恢复、DNS 全答案校验 / IP 固定连接、显式夹具开关、缓存费用未知保持、旧历史显式认领和联动版本漂移拒绝。还覆盖两类真实进程恢复：
 
 1. 进程 A 暂停后退出，进程 B 读取同一文件检查点并恢复，保留人工方向和计划。
 2. 在分析节点运行期间强制终止 OS 进程，另一个进程从检索后的检查点继续，已完成的规划 / 搜索不重复执行。
+
+统计一致性测试覆盖五类 usage 夹具（带 usage、无 usage、429 后成功、缓存 token、超时），验证模型与搜索次数分开、未知费用不显示为免费。
 
 GitHub Actions 在 Windows / Ubuntu 的 Python 3.12 上运行核心测试。`requirements.txt` 固定直接依赖，`requirements.lock` 固定本次完整依赖树。
 
 关键实现：`agentlab/engine.py` 图和角色；`providers.py` 模型/搜索；`storage.py` 持久化；`api.py` API/SSE；`web/` 中文工作台；`tests/` 行为、协议与跨进程恢复测试。
 
 版本依据（2026-10-14）：[LangGraph 1.2.15](https://pypi.org/project/langgraph/1.2.15/)、[SQLite checkpointer 3.1.2](https://pypi.org/project/langgraph-checkpoint-sqlite/3.1.2/)、[官方 interrupt / Command 恢复语义](https://reference.langchain.com/python/langgraph/types/interrupt)。
+
+## 公平架构对照实验（A08）
+
+`scripts/prepare_experiment.py` 生成可重放的实验计划：
+
+```bash
+.venv/Scripts/python scripts/prepare_experiment.py --repeats 2 --seed 20261015
+```
+
+输出 `examples/experiment_plan.json`，包含：
+- 60 个执行单元（15 题 × single/multi × 2 次重复），带 `dataset_hash`、`prompt_hash`、代码 HEAD/dirty 状态、策略版本
+- 冻结配置（温度、工具模式、搜索适配、内部调用上限），两架构共享
+- 检索缓存 schema（query→片段/URL/hash），miss 策略对称执行，不一侧联网一侧用缓存
+- 质量评价量表（5 维度 × 1-5 分），评分者为独立人工复核，非 Agent 自审
+
+执行顺序按记录的 seed 随机化，single/multi 交替出现，不让一侧总先执行。runner 每单元完成后落盘，失败计入矩阵，重试同单元保持幂等 ID。
+
+## 已知限制与待办
+
+| 事项 | 状态 |
+|---|---|
+| 本地工程（A00–A08、A12） | 已完成 |
+| 跨项目联动（A09） | 等待 Studio B13 共同契约 |
+| 真实供应商小预算验收（A10） | `awaiting_live_authorization` |
+| 真实 single/multi 对照（A11） | `awaiting_live_authorization` |
+| 发布 | 未要求 |
+
+真实供应商验证和对照实验需要明确的 provider/model/预算授权后才能执行。未经实际评阅的质量项记为未评，不拿自审结果填充。结果可以是无优势或多 Agent 更差，不能预设结论。
 
 MIT License。

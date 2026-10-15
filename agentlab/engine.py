@@ -21,6 +21,7 @@ class ResearchState(TypedDict, total=False):
     task_id: str
     question: str
     direction: str
+    human_decisions: list[dict]
     execution_mode: str
     provider: str
     mode: str
@@ -193,28 +194,38 @@ class Engine:
 
     def human_plan(self, s):
         answer = interrupt({"kind": "plan", "message": "请审核计划。可以调整研究方向或逐行编辑计划，然后继续。",
-                            "plan": s["plan"], "question": s["question"]})
-        direction = str(answer.get("direction") or "").strip()
+                            "plan": s["plan"], "question": s["question"], "direction": s.get("direction", "")})
+        raw = str(answer.get("direction") or "").strip()
+        prev = s.get("direction", "") or ""
+        # 与原文相同或留空都视为“不改方向”，避免预填确认后误清检索词。
+        changed = bool(raw) and raw != prev
         plan = answer.get("plan")
-        return {"plan": plan or s["plan"], "direction": direction or s.get("direction", ""),
-                "queries": [direction[:250]] if direction else s["queries"], "route": "searcher", "status": "running"}
+        confirmed_plan=[p[:500] for p in plan][:8] if plan else s["plan"]
+        return {"human_decisions":[*s.get('human_decisions',[]),{'kind':'plan','plan':confirmed_plan,'direction':raw or prev,'time':time.time()}],"plan": confirmed_plan,
+                "direction": raw or prev,
+                "queries": [raw[:250]] if changed else s["queries"], "route": "searcher", "status": "running"}
 
     def clarify(self, s):
         answer = interrupt({"kind": "clarification", "message": s.get("clarification") or "当前资料不足，请补充更具体的研究对象、时间范围或关键词。",
-                            "plan": s.get("plan", []), "question": s["question"]})
-        direction = str(answer.get("direction") or "").strip()
-        if not direction:
+                            "plan": s.get("plan", []), "question": s["question"], "direction": s.get("direction", "")})
+        raw = str(answer.get("direction") or "").strip()
+        if not raw:
             # A missing answer is harmless and remains an explicit request for user input.
             return {"route": "clarify", "clarification": "请填写补充说明后继续。"}
-        return {"direction": direction, "queries": [direction[:250]], "plan": answer.get("plan") or s.get("plan", []),
-                "route": "searcher", "status": "running"}
+        prev = s.get("direction", "") or ""
+        changed = raw != prev
+        plan = answer.get("plan") or s.get("plan", [])
+        return {"human_decisions":[*s.get('human_decisions',[]),{'kind':'clarification','plan':plan,'direction':raw,'time':time.time()}],"direction": raw, "queries": [raw[:250]] if changed else s.get("queries", []),
+                "plan": plan, "route": "searcher", "status": "running"}
 
     def recover(self, s):
         answer = interrupt({"kind": "error", "message": s["error"], "category": s.get("error_category", "provider_error"), "failed_node": s["failed_node"],
-                            "plan": s.get("plan", []), "question": s["question"]})
-        direction = str(answer.get("direction") or "").strip()
-        return {"route": s["failed_node"], "error": "", "direction": direction or s.get("direction", ""),
-                "queries": [direction[:250]] if direction else s.get("queries", []), "status": "running", "recovered": True}
+                            "plan": s.get("plan", []), "question": s["question"], "direction": s.get("direction", "")})
+        raw = str(answer.get("direction") or "").strip()
+        prev = s.get("direction", "") or ""
+        changed = bool(raw) and raw != prev
+        return {"human_decisions":[*s.get('human_decisions',[]),{'kind':'recovery','plan':s.get('plan',[]),'direction':raw or prev,'time':time.time()}],"route": s["failed_node"], "error": "", "direction": raw or prev,
+                "queries": [raw[:250]] if changed else s.get("queries", []), "status": "running", "recovered": True}
 
     def searcher(self, s):
         if self.native(s):
@@ -236,6 +247,7 @@ class Engine:
                 return remaining
             search = self.search_factory(s["execution_mode"], self.event, timeout=self.guard(s))
             search.engine = s.get("provider_config", {}).get("search", "wikipedia")
+            search.snapshot = s.get("provider_config", {}).get("search_snapshot")
             search.before_attempt = charge
             results = search.search(query)
             searched.append(query)
@@ -316,7 +328,8 @@ class Engine:
         builder = StateGraph(ResearchState)
         names = ["planner", "human_plan", "searcher", "analyst", "reviewer", "clarify", "recover", "single", "finalize"]
         for name in names:
-            builder.add_node(name, self.wrap(name, getattr(self, name), pause=name in {"human_plan", "clarify", "recover", "finalize"}))
+            # finalize 不是人工等待节点，必须发事件，否则 UI 最后一步永远显示未开始。
+            builder.add_node(name, self.wrap(name, getattr(self, name), pause=name in {"human_plan", "clarify", "recover"}))
         builder.add_conditional_edges(START, lambda s: ("single" if self.native(s) else "searcher") if s["mode"] == "single" else "planner")
         for name in names:
             if name == "finalize":
@@ -336,12 +349,14 @@ class Engine:
         defaults = {p.upper(): values for p, values in PRESETS.items()}
         frozen = {"provider": request["provider"], "base_url": os.getenv(provider + "_BASE_URL", defaults[provider][0]),
                   "model": os.getenv(provider + "_MODEL", defaults[provider][1]), "temperature": request.get("temperature", 0),
-                  "protocol": defaults[provider][2], "max_tokens": request.get("max_tokens", 2600), "supports_tools": True,
+                  "protocol": defaults[provider][2], "max_tokens": request.get("max_tokens", 8192), "supports_tools": True,
                   "input_price": os.getenv(provider + "_INPUT_PRICE_PER_MILLION", ""),
                   "output_price": os.getenv(provider + "_OUTPUT_PRICE_PER_MILLION", ""),
                   "tool_mode": os.getenv("AGENTLAB_TOOL_MODE", "json"),
                   "search": os.getenv("AGENTLAB_SEARCH", "wikipedia")}
         frozen = dict(request.get("provider_config", frozen))
+        if request.get('search_snapshot') is not None:
+            frozen['search_snapshot']=request['search_snapshot']
         frozen["research_instructions_sha256"] = hashlib.sha256(request.get("research_instructions", "").encode()).hexdigest()
         return {**request, "provider_config": frozen, "response_models": [], "task_id": task_id, "direction": "", "plan": [], "queries": [request["question"][:250]],
                 "searched": [], "sources": [], "draft": "", "report": "", "calls": 0, "model_calls": 0,

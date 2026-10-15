@@ -258,7 +258,7 @@ def test_native_two_tools_roundtrip_and_actual_evidence_return(monkeypatch, prot
             if protocol == "anthropic":
                 assert body["system"] and request.headers["x-api-key"] == KEY
                 return httpx.Response(200, json={"content": [{"type": "text", "text": "Search"}, *[{"type": "tool_use", "id": c["id"], "name": "search_web", "input": json.loads(c["function"]["arguments"])} for c in calls]], "usage": {"input_tokens": 3, "output_tokens": 2}})
-            assert body["max_completion_tokens"] == 2600 and "temperature" not in body
+            assert body["max_completion_tokens"] == 8192 and "temperature" not in body
             return httpx.Response(200, json={"choices": [{"message": {"content": None, "tool_calls": calls}}], "usage": {"prompt_tokens": 3, "completion_tokens": 2}})
         if protocol == "anthropic":
             results = body["messages"][-1]["content"]

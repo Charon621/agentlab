@@ -71,4 +71,5 @@ def test_live_without_key_pauses_with_actionable_error(tmp_path, monkeypatch):
         task=settled(client,response.json()['id'])
         assert task['status']=='paused'
         assert task['result']['interrupts'][0]['kind']=='error'
-        assert 'QWEN_API_KEY' in task['error']
+        # A03: no credential identity → legacy_binding_required (actionable, no env fallback).
+        assert task['result']['interrupts'][0].get('category') in ('legacy_binding_required', 'credential_missing')

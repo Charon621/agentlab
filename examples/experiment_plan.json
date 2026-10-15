@@ -1,0 +1,923 @@
+{
+  "schema_version": "1.0",
+  "experiment_id": "5c034444f62c4a55b6556fbbcbccc255",
+  "created": "2026-10-15T08:49:40.694751+00:00",
+  "strategy_version": "1.0",
+  "dataset_hash": "f2a4933d6ed27771307fc166826fe4e8fe3d95f6e12b5c7e52d8a547d16c2f21",
+  "prompt_hash": "eaf841059833cca1dec37df75f34159578354ab7754f214310d21b076ab73fc6",
+  "code_state": {
+    "head": "87d8ce6428436013c3094af86c954dd6c9313338",
+    "branch": "feature/web-model-api",
+    "dirty": true,
+    "status_short": [
+      "M .env.example",
+      " M README.md",
+      " M agentlab/api.py",
+      " M agentlab/configuration.py",
+      " M agentlab/engine.py",
+      " M agentlab/models.py",
+      " M agentlab/providers.py",
+      " M agentlab/storage.py",
+      " M tests/recovery_worker.py",
+      " M tests/test_api.py",
+      " M tests/test_model_api.py",
+      " M web/app.js",
+      " M web/index.html",
+      " M web/style.css",
+      " M \"\\345\\220\\257\\345\\212\\250.cmd\"",
+      "?? agentlab/search_replay.py",
+      "?? examples/experiment_plan.json",
+      "?? scripts/prepare_experiment.py",
+      "?? scripts/run_plan.py",
+      "?? start.ps1",
+      "?? tests/conftest.py",
+      "?? tests/isolation.py",
+      "?? tests/test_experiment_plan.py",
+      "?? tests/test_isolation.py",
+      "?? tests/test_metrics_consistency.py",
+      "?? tests/test_repair_contracts.py"
+    ]
+  },
+  "seed": 20261015,
+  "repeats": 2,
+  "max_calls": 12,
+  "timeout_seconds": 120,
+  "research_instructions": "说明结论边界、反例与资料来源；证据不足时明确标记。",
+  "warning": "Mock plan only; no real model calls. Quality evaluation is independent of Agent self-review.",
+  "frozen_config": {
+    "temperature": 0,
+    "tool_mode": "json",
+    "search_adapter": "wikipedia",
+    "internal_call_upper_bound": 12,
+    "note": "Both architectures share the same frozen model/config/temperature/tools/call limit."
+  },
+  "search_cache_schema": {
+    "description": "Pre-frozen retrieval: query → snippets, URL, retrieved_at, hash. Both architectures read the same cache.",
+    "miss_policy": "Symmetric: both architectures use cache; if cache miss, both record miss (no side goes online).",
+    "fields": [
+      "query",
+      "url",
+      "title",
+      "excerpt",
+      "retrieved_at",
+      "sha256",
+      "retrieved"
+    ]
+  },
+  "quality_rubric": {
+    "dimensions": [
+      "factual_accuracy",
+      "citation_support",
+      "completeness",
+      "reasoning_quality",
+      "limitation_awareness"
+    ],
+    "scale": "1-5 per dimension",
+    "scorer": "Human independent review; NOT Agent self-evaluation.",
+    "note": "Report quality scores only after human review. Unreviewed items marked as 'not_reviewed'."
+  },
+  "units": [
+    {
+      "unit_id": "ecology-02-multi-r1",
+      "case_id": "ecology-02",
+      "difficulty": "complex",
+      "question": "讨论城市绿地对热岛效应的影响机制及其局限，区分局部观测与普遍因果结论。",
+      "mode": "multi",
+      "repeat": 1,
+      "rubric": [
+        "机制与证据区分",
+        "气候规模混杂",
+        "不编造统一降温幅度"
+      ],
+      "order": 0
+    },
+    {
+      "unit_id": "ecology-02-single-r1",
+      "case_id": "ecology-02",
+      "difficulty": "complex",
+      "question": "讨论城市绿地对热岛效应的影响机制及其局限，区分局部观测与普遍因果结论。",
+      "mode": "single",
+      "repeat": 1,
+      "rubric": [
+        "机制与证据区分",
+        "气候规模混杂",
+        "不编造统一降温幅度"
+      ],
+      "order": 1
+    },
+    {
+      "unit_id": "science-01-single-r0",
+      "case_id": "science-01",
+      "difficulty": "simple",
+      "question": "光合作用中光反应和碳固定分别起什么作用？",
+      "mode": "single",
+      "repeat": 0,
+      "rubric": [
+        "关键过程无颠倒",
+        "区分能量转换和碳固定",
+        "来源可追溯"
+      ],
+      "order": 2
+    },
+    {
+      "unit_id": "science-01-multi-r0",
+      "case_id": "science-01",
+      "difficulty": "simple",
+      "question": "光合作用中光反应和碳固定分别起什么作用？",
+      "mode": "multi",
+      "repeat": 0,
+      "rubric": [
+        "关键过程无颠倒",
+        "区分能量转换和碳固定",
+        "来源可追溯"
+      ],
+      "order": 3
+    },
+    {
+      "unit_id": "computing-02-single-r0",
+      "case_id": "computing-02",
+      "difficulty": "complex",
+      "question": "比较 at-most-once、at-least-once 与 exactly-once 的保证，讨论外部模型 API 调用中断后的恢复边界。",
+      "mode": "single",
+      "repeat": 0,
+      "rubric": [
+        "区分传递与处理",
+        "指出外部副作用困难",
+        "重试预算与去重建议"
+      ],
+      "order": 4
+    },
+    {
+      "unit_id": "computing-02-multi-r0",
+      "case_id": "computing-02",
+      "difficulty": "complex",
+      "question": "比较 at-most-once、at-least-once 与 exactly-once 的保证，讨论外部模型 API 调用中断后的恢复边界。",
+      "mode": "multi",
+      "repeat": 0,
+      "rubric": [
+        "区分传递与处理",
+        "指出外部副作用困难",
+        "重试预算与去重建议"
+      ],
+      "order": 5
+    },
+    {
+      "unit_id": "ecology-01-single-r0",
+      "case_id": "ecology-01",
+      "difficulty": "simple",
+      "question": "生物多样性可以在哪几个层次上描述？",
+      "mode": "single",
+      "repeat": 0,
+      "rubric": [
+        "遗传物种生态系统层次",
+        "不虚构指标数值",
+        "基础定义有来源"
+      ],
+      "order": 6
+    },
+    {
+      "unit_id": "ecology-01-multi-r0",
+      "case_id": "ecology-01",
+      "difficulty": "simple",
+      "question": "生物多样性可以在哪几个层次上描述？",
+      "mode": "multi",
+      "repeat": 0,
+      "rubric": [
+        "遗传物种生态系统层次",
+        "不虚构指标数值",
+        "基础定义有来源"
+      ],
+      "order": 7
+    },
+    {
+      "unit_id": "history-02-single-r0",
+      "case_id": "history-02",
+      "difficulty": "complex",
+      "question": "比较工业革命中技术、能源和制度三种解释视角，指出各自无法单独解释的问题。",
+      "mode": "single",
+      "repeat": 0,
+      "rubric": [
+        "避免单因解释",
+        "明确学说差异",
+        "区分事实和解释"
+      ],
+      "order": 8
+    },
+    {
+      "unit_id": "history-02-multi-r0",
+      "case_id": "history-02",
+      "difficulty": "complex",
+      "question": "比较工业革命中技术、能源和制度三种解释视角，指出各自无法单独解释的问题。",
+      "mode": "multi",
+      "repeat": 0,
+      "rubric": [
+        "避免单因解释",
+        "明确学说差异",
+        "区分事实和解释"
+      ],
+      "order": 9
+    },
+    {
+      "unit_id": "energy-01-multi-r1",
+      "case_id": "energy-01",
+      "difficulty": "simple",
+      "question": "太阳能和风能发电各有哪些基础优点和局限？",
+      "mode": "multi",
+      "repeat": 1,
+      "rubric": [
+        "说明波动性",
+        "不编造时点价格",
+        "至少两项有来源比较"
+      ],
+      "order": 10
+    },
+    {
+      "unit_id": "energy-01-single-r1",
+      "case_id": "energy-01",
+      "difficulty": "simple",
+      "question": "太阳能和风能发电各有哪些基础优点和局限？",
+      "mode": "single",
+      "repeat": 1,
+      "rubric": [
+        "说明波动性",
+        "不编造时点价格",
+        "至少两项有来源比较"
+      ],
+      "order": 11
+    },
+    {
+      "unit_id": "science-01-multi-r1",
+      "case_id": "science-01",
+      "difficulty": "simple",
+      "question": "光合作用中光反应和碳固定分别起什么作用？",
+      "mode": "multi",
+      "repeat": 1,
+      "rubric": [
+        "关键过程无颠倒",
+        "区分能量转换和碳固定",
+        "来源可追溯"
+      ],
+      "order": 12
+    },
+    {
+      "unit_id": "science-01-single-r1",
+      "case_id": "science-01",
+      "difficulty": "simple",
+      "question": "光合作用中光反应和碳固定分别起什么作用？",
+      "mode": "single",
+      "repeat": 1,
+      "rubric": [
+        "关键过程无颠倒",
+        "区分能量转换和碳固定",
+        "来源可追溯"
+      ],
+      "order": 13
+    },
+    {
+      "unit_id": "energy-02-multi-r1",
+      "case_id": "energy-02",
+      "difficulty": "complex",
+      "question": "比较电池储能和抽水蓄能在电网调节中的适用范围，避免用单一指标决定优劣。",
+      "mode": "multi",
+      "repeat": 1,
+      "rubric": [
+        "比较尺度和响应",
+        "讨论地理条件",
+        "说明资料适用年份"
+      ],
+      "order": 14
+    },
+    {
+      "unit_id": "energy-02-single-r1",
+      "case_id": "energy-02",
+      "difficulty": "complex",
+      "question": "比较电池储能和抽水蓄能在电网调节中的适用范围，避免用单一指标决定优劣。",
+      "mode": "single",
+      "repeat": 1,
+      "rubric": [
+        "比较尺度和响应",
+        "讨论地理条件",
+        "说明资料适用年份"
+      ],
+      "order": 15
+    },
+    {
+      "unit_id": "tech-02-single-r0",
+      "case_id": "tech-02",
+      "difficulty": "complex",
+      "question": "为一个 Windows 单人离线研究工具比较 SQLite 与 PostgreSQL，重点是备份、并发和运维。",
+      "mode": "single",
+      "repeat": 0,
+      "rubric": [
+        "按约束给有条件建议",
+        "讨论并发与恢复",
+        "引用和限制明确"
+      ],
+      "order": 16
+    },
+    {
+      "unit_id": "tech-02-multi-r0",
+      "case_id": "tech-02",
+      "difficulty": "complex",
+      "question": "为一个 Windows 单人离线研究工具比较 SQLite 与 PostgreSQL，重点是备份、并发和运维。",
+      "mode": "multi",
+      "repeat": 0,
+      "rubric": [
+        "按约束给有条件建议",
+        "讨论并发与恢复",
+        "引用和限制明确"
+      ],
+      "order": 17
+    },
+    {
+      "unit_id": "energy-01-single-r0",
+      "case_id": "energy-01",
+      "difficulty": "simple",
+      "question": "太阳能和风能发电各有哪些基础优点和局限？",
+      "mode": "single",
+      "repeat": 0,
+      "rubric": [
+        "说明波动性",
+        "不编造时点价格",
+        "至少两项有来源比较"
+      ],
+      "order": 18
+    },
+    {
+      "unit_id": "energy-01-multi-r0",
+      "case_id": "energy-01",
+      "difficulty": "simple",
+      "question": "太阳能和风能发电各有哪些基础优点和局限？",
+      "mode": "multi",
+      "repeat": 0,
+      "rubric": [
+        "说明波动性",
+        "不编造时点价格",
+        "至少两项有来源比较"
+      ],
+      "order": 19
+    },
+    {
+      "unit_id": "tech-02-multi-r1",
+      "case_id": "tech-02",
+      "difficulty": "complex",
+      "question": "为一个 Windows 单人离线研究工具比较 SQLite 与 PostgreSQL，重点是备份、并发和运维。",
+      "mode": "multi",
+      "repeat": 1,
+      "rubric": [
+        "按约束给有条件建议",
+        "讨论并发与恢复",
+        "引用和限制明确"
+      ],
+      "order": 20
+    },
+    {
+      "unit_id": "tech-02-single-r1",
+      "case_id": "tech-02",
+      "difficulty": "complex",
+      "question": "为一个 Windows 单人离线研究工具比较 SQLite 与 PostgreSQL，重点是备份、并发和运维。",
+      "mode": "single",
+      "repeat": 1,
+      "rubric": [
+        "按约束给有条件建议",
+        "讨论并发与恢复",
+        "引用和限制明确"
+      ],
+      "order": 21
+    },
+    {
+      "unit_id": "ecology-02-single-r0",
+      "case_id": "ecology-02",
+      "difficulty": "complex",
+      "question": "讨论城市绿地对热岛效应的影响机制及其局限，区分局部观测与普遍因果结论。",
+      "mode": "single",
+      "repeat": 0,
+      "rubric": [
+        "机制与证据区分",
+        "气候规模混杂",
+        "不编造统一降温幅度"
+      ],
+      "order": 22
+    },
+    {
+      "unit_id": "ecology-02-multi-r0",
+      "case_id": "ecology-02",
+      "difficulty": "complex",
+      "question": "讨论城市绿地对热岛效应的影响机制及其局限，区分局部观测与普遍因果结论。",
+      "mode": "multi",
+      "repeat": 0,
+      "rubric": [
+        "机制与证据区分",
+        "气候规模混杂",
+        "不编造统一降温幅度"
+      ],
+      "order": 23
+    },
+    {
+      "unit_id": "energy-02-single-r0",
+      "case_id": "energy-02",
+      "difficulty": "complex",
+      "question": "比较电池储能和抽水蓄能在电网调节中的适用范围，避免用单一指标决定优劣。",
+      "mode": "single",
+      "repeat": 0,
+      "rubric": [
+        "比较尺度和响应",
+        "讨论地理条件",
+        "说明资料适用年份"
+      ],
+      "order": 24
+    },
+    {
+      "unit_id": "energy-02-multi-r0",
+      "case_id": "energy-02",
+      "difficulty": "complex",
+      "question": "比较电池储能和抽水蓄能在电网调节中的适用范围，避免用单一指标决定优劣。",
+      "mode": "multi",
+      "repeat": 0,
+      "rubric": [
+        "比较尺度和响应",
+        "讨论地理条件",
+        "说明资料适用年份"
+      ],
+      "order": 25
+    },
+    {
+      "unit_id": "computing-01-multi-r1",
+      "case_id": "computing-01",
+      "difficulty": "simple",
+      "question": "什么是 HTTP 幂等性？GET、PUT 与 POST 的语义有哪些差异？",
+      "mode": "multi",
+      "repeat": 1,
+      "rubric": [
+        "方法语义准确",
+        "区分安全与幂等",
+        "说明应用层去重"
+      ],
+      "order": 26
+    },
+    {
+      "unit_id": "computing-01-single-r1",
+      "case_id": "computing-01",
+      "difficulty": "simple",
+      "question": "什么是 HTTP 幂等性？GET、PUT 与 POST 的语义有哪些差异？",
+      "mode": "single",
+      "repeat": 1,
+      "rubric": [
+        "方法语义准确",
+        "区分安全与幂等",
+        "说明应用层去重"
+      ],
+      "order": 27
+    },
+    {
+      "unit_id": "ecology-01-multi-r1",
+      "case_id": "ecology-01",
+      "difficulty": "simple",
+      "question": "生物多样性可以在哪几个层次上描述？",
+      "mode": "multi",
+      "repeat": 1,
+      "rubric": [
+        "遗传物种生态系统层次",
+        "不虚构指标数值",
+        "基础定义有来源"
+      ],
+      "order": 28
+    },
+    {
+      "unit_id": "ecology-01-single-r1",
+      "case_id": "ecology-01",
+      "difficulty": "simple",
+      "question": "生物多样性可以在哪几个层次上描述？",
+      "mode": "single",
+      "repeat": 1,
+      "rubric": [
+        "遗传物种生态系统层次",
+        "不虚构指标数值",
+        "基础定义有来源"
+      ],
+      "order": 29
+    },
+    {
+      "unit_id": "science-02-multi-r1",
+      "case_id": "science-02",
+      "difficulty": "complex",
+      "question": "比较随机对照试验与观察性研究能支持的因果推断，说明混杂因素的影响。",
+      "mode": "multi",
+      "repeat": 1,
+      "rubric": [
+        "区分相关与因果",
+        "包含随机化局限",
+        "不把研究类型直接当质量结论"
+      ],
+      "order": 30
+    },
+    {
+      "unit_id": "science-02-single-r1",
+      "case_id": "science-02",
+      "difficulty": "complex",
+      "question": "比较随机对照试验与观察性研究能支持的因果推断，说明混杂因素的影响。",
+      "mode": "single",
+      "repeat": 1,
+      "rubric": [
+        "区分相关与因果",
+        "包含随机化局限",
+        "不把研究类型直接当质量结论"
+      ],
+      "order": 31
+    },
+    {
+      "unit_id": "history-01-multi-r1",
+      "case_id": "history-01",
+      "difficulty": "simple",
+      "question": "印刷技术如何影响知识传播？限定为基础历史机制，不要求最新研究。",
+      "mode": "multi",
+      "repeat": 1,
+      "rubric": [
+        "明确历史范围",
+        "不混淆不同地区发明",
+        "结论有依据"
+      ],
+      "order": 32
+    },
+    {
+      "unit_id": "history-01-single-r1",
+      "case_id": "history-01",
+      "difficulty": "simple",
+      "question": "印刷技术如何影响知识传播？限定为基础历史机制，不要求最新研究。",
+      "mode": "single",
+      "repeat": 1,
+      "rubric": [
+        "明确历史范围",
+        "不混淆不同地区发明",
+        "结论有依据"
+      ],
+      "order": 33
+    },
+    {
+      "unit_id": "method-01-single-r0",
+      "case_id": "method-01",
+      "difficulty": "simple",
+      "question": "什么是系统综述，它与叙述性综述的基本区别是什么？",
+      "mode": "single",
+      "repeat": 0,
+      "rubric": [
+        "检索与纳排方法",
+        "避免笼统优劣判断",
+        "引用术语出处"
+      ],
+      "order": 34
+    },
+    {
+      "unit_id": "method-01-multi-r0",
+      "case_id": "method-01",
+      "difficulty": "simple",
+      "question": "什么是系统综述，它与叙述性综述的基本区别是什么？",
+      "mode": "multi",
+      "repeat": 0,
+      "rubric": [
+        "检索与纳排方法",
+        "避免笼统优劣判断",
+        "引用术语出处"
+      ],
+      "order": 35
+    },
+    {
+      "unit_id": "method-01-multi-r1",
+      "case_id": "method-01",
+      "difficulty": "simple",
+      "question": "什么是系统综述，它与叙述性综述的基本区别是什么？",
+      "mode": "multi",
+      "repeat": 1,
+      "rubric": [
+        "检索与纳排方法",
+        "避免笼统优劣判断",
+        "引用术语出处"
+      ],
+      "order": 36
+    },
+    {
+      "unit_id": "method-01-single-r1",
+      "case_id": "method-01",
+      "difficulty": "simple",
+      "question": "什么是系统综述，它与叙述性综述的基本区别是什么？",
+      "mode": "single",
+      "repeat": 1,
+      "rubric": [
+        "检索与纳排方法",
+        "避免笼统优劣判断",
+        "引用术语出处"
+      ],
+      "order": 37
+    },
+    {
+      "unit_id": "history-01-single-r0",
+      "case_id": "history-01",
+      "difficulty": "simple",
+      "question": "印刷技术如何影响知识传播？限定为基础历史机制，不要求最新研究。",
+      "mode": "single",
+      "repeat": 0,
+      "rubric": [
+        "明确历史范围",
+        "不混淆不同地区发明",
+        "结论有依据"
+      ],
+      "order": 38
+    },
+    {
+      "unit_id": "history-01-multi-r0",
+      "case_id": "history-01",
+      "difficulty": "simple",
+      "question": "印刷技术如何影响知识传播？限定为基础历史机制，不要求最新研究。",
+      "mode": "multi",
+      "repeat": 0,
+      "rubric": [
+        "明确历史范围",
+        "不混淆不同地区发明",
+        "结论有依据"
+      ],
+      "order": 39
+    },
+    {
+      "unit_id": "computing-02-multi-r1",
+      "case_id": "computing-02",
+      "difficulty": "complex",
+      "question": "比较 at-most-once、at-least-once 与 exactly-once 的保证，讨论外部模型 API 调用中断后的恢复边界。",
+      "mode": "multi",
+      "repeat": 1,
+      "rubric": [
+        "区分传递与处理",
+        "指出外部副作用困难",
+        "重试预算与去重建议"
+      ],
+      "order": 40
+    },
+    {
+      "unit_id": "computing-02-single-r1",
+      "case_id": "computing-02",
+      "difficulty": "complex",
+      "question": "比较 at-most-once、at-least-once 与 exactly-once 的保证，讨论外部模型 API 调用中断后的恢复边界。",
+      "mode": "single",
+      "repeat": 1,
+      "rubric": [
+        "区分传递与处理",
+        "指出外部副作用困难",
+        "重试预算与去重建议"
+      ],
+      "order": 41
+    },
+    {
+      "unit_id": "history-02-multi-r1",
+      "case_id": "history-02",
+      "difficulty": "complex",
+      "question": "比较工业革命中技术、能源和制度三种解释视角，指出各自无法单独解释的问题。",
+      "mode": "multi",
+      "repeat": 1,
+      "rubric": [
+        "避免单因解释",
+        "明确学说差异",
+        "区分事实和解释"
+      ],
+      "order": 42
+    },
+    {
+      "unit_id": "history-02-single-r1",
+      "case_id": "history-02",
+      "difficulty": "complex",
+      "question": "比较工业革命中技术、能源和制度三种解释视角，指出各自无法单独解释的问题。",
+      "mode": "single",
+      "repeat": 1,
+      "rubric": [
+        "避免单因解释",
+        "明确学说差异",
+        "区分事实和解释"
+      ],
+      "order": 43
+    },
+    {
+      "unit_id": "computing-01-single-r0",
+      "case_id": "computing-01",
+      "difficulty": "simple",
+      "question": "什么是 HTTP 幂等性？GET、PUT 与 POST 的语义有哪些差异？",
+      "mode": "single",
+      "repeat": 0,
+      "rubric": [
+        "方法语义准确",
+        "区分安全与幂等",
+        "说明应用层去重"
+      ],
+      "order": 44
+    },
+    {
+      "unit_id": "computing-01-multi-r0",
+      "case_id": "computing-01",
+      "difficulty": "simple",
+      "question": "什么是 HTTP 幂等性？GET、PUT 与 POST 的语义有哪些差异？",
+      "mode": "multi",
+      "repeat": 0,
+      "rubric": [
+        "方法语义准确",
+        "区分安全与幂等",
+        "说明应用层去重"
+      ],
+      "order": 45
+    },
+    {
+      "unit_id": "tech-01-multi-r1",
+      "case_id": "tech-01",
+      "difficulty": "simple",
+      "question": "SQLite 与 PostgreSQL 的核心架构有什么不同？",
+      "mode": "multi",
+      "repeat": 1,
+      "rubric": [
+        "区分嵌入式与服务端",
+        "避免把所有工作负载归为同类",
+        "引用支持具体差异"
+      ],
+      "order": 46
+    },
+    {
+      "unit_id": "tech-01-single-r1",
+      "case_id": "tech-01",
+      "difficulty": "simple",
+      "question": "SQLite 与 PostgreSQL 的核心架构有什么不同？",
+      "mode": "single",
+      "repeat": 1,
+      "rubric": [
+        "区分嵌入式与服务端",
+        "避免把所有工作负载归为同类",
+        "引用支持具体差异"
+      ],
+      "order": 47
+    },
+    {
+      "unit_id": "tech-01-single-r0",
+      "case_id": "tech-01",
+      "difficulty": "simple",
+      "question": "SQLite 与 PostgreSQL 的核心架构有什么不同？",
+      "mode": "single",
+      "repeat": 0,
+      "rubric": [
+        "区分嵌入式与服务端",
+        "避免把所有工作负载归为同类",
+        "引用支持具体差异"
+      ],
+      "order": 48
+    },
+    {
+      "unit_id": "tech-01-multi-r0",
+      "case_id": "tech-01",
+      "difficulty": "simple",
+      "question": "SQLite 与 PostgreSQL 的核心架构有什么不同？",
+      "mode": "multi",
+      "repeat": 0,
+      "rubric": [
+        "区分嵌入式与服务端",
+        "避免把所有工作负载归为同类",
+        "引用支持具体差异"
+      ],
+      "order": 49
+    },
+    {
+      "unit_id": "method-02-multi-r1",
+      "case_id": "method-02",
+      "difficulty": "complex",
+      "question": "如何设计公平的单 Agent 与多 Agent 对照实验？请列出应控制的变量与失败率定义。",
+      "mode": "multi",
+      "repeat": 1,
+      "rubric": [
+        "相同模型工具题目预算",
+        "独立质量标准",
+        "处理超时失败与重复采样"
+      ],
+      "order": 50
+    },
+    {
+      "unit_id": "method-02-single-r1",
+      "case_id": "method-02",
+      "difficulty": "complex",
+      "question": "如何设计公平的单 Agent 与多 Agent 对照实验？请列出应控制的变量与失败率定义。",
+      "mode": "single",
+      "repeat": 1,
+      "rubric": [
+        "相同模型工具题目预算",
+        "独立质量标准",
+        "处理超时失败与重复采样"
+      ],
+      "order": 51
+    },
+    {
+      "unit_id": "method-02-single-r0",
+      "case_id": "method-02",
+      "difficulty": "complex",
+      "question": "如何设计公平的单 Agent 与多 Agent 对照实验？请列出应控制的变量与失败率定义。",
+      "mode": "single",
+      "repeat": 0,
+      "rubric": [
+        "相同模型工具题目预算",
+        "独立质量标准",
+        "处理超时失败与重复采样"
+      ],
+      "order": 52
+    },
+    {
+      "unit_id": "method-02-multi-r0",
+      "case_id": "method-02",
+      "difficulty": "complex",
+      "question": "如何设计公平的单 Agent 与多 Agent 对照实验？请列出应控制的变量与失败率定义。",
+      "mode": "multi",
+      "repeat": 0,
+      "rubric": [
+        "相同模型工具题目预算",
+        "独立质量标准",
+        "处理超时失败与重复采样"
+      ],
+      "order": 53
+    },
+    {
+      "unit_id": "evaluation-01-single-r0",
+      "case_id": "evaluation-01",
+      "difficulty": "complex",
+      "question": "为什么模型自评不能直接代表事实准确率？设计包含引用支持与人工一致性的评价方法。",
+      "mode": "single",
+      "repeat": 0,
+      "rubric": [
+        "指出评审偏差",
+        "引用存在不等于支持",
+        "定义独立复核与一致性"
+      ],
+      "order": 54
+    },
+    {
+      "unit_id": "evaluation-01-multi-r0",
+      "case_id": "evaluation-01",
+      "difficulty": "complex",
+      "question": "为什么模型自评不能直接代表事实准确率？设计包含引用支持与人工一致性的评价方法。",
+      "mode": "multi",
+      "repeat": 0,
+      "rubric": [
+        "指出评审偏差",
+        "引用存在不等于支持",
+        "定义独立复核与一致性"
+      ],
+      "order": 55
+    },
+    {
+      "unit_id": "science-02-single-r0",
+      "case_id": "science-02",
+      "difficulty": "complex",
+      "question": "比较随机对照试验与观察性研究能支持的因果推断，说明混杂因素的影响。",
+      "mode": "single",
+      "repeat": 0,
+      "rubric": [
+        "区分相关与因果",
+        "包含随机化局限",
+        "不把研究类型直接当质量结论"
+      ],
+      "order": 56
+    },
+    {
+      "unit_id": "science-02-multi-r0",
+      "case_id": "science-02",
+      "difficulty": "complex",
+      "question": "比较随机对照试验与观察性研究能支持的因果推断，说明混杂因素的影响。",
+      "mode": "multi",
+      "repeat": 0,
+      "rubric": [
+        "区分相关与因果",
+        "包含随机化局限",
+        "不把研究类型直接当质量结论"
+      ],
+      "order": 57
+    },
+    {
+      "unit_id": "evaluation-01-multi-r1",
+      "case_id": "evaluation-01",
+      "difficulty": "complex",
+      "question": "为什么模型自评不能直接代表事实准确率？设计包含引用支持与人工一致性的评价方法。",
+      "mode": "multi",
+      "repeat": 1,
+      "rubric": [
+        "指出评审偏差",
+        "引用存在不等于支持",
+        "定义独立复核与一致性"
+      ],
+      "order": 58
+    },
+    {
+      "unit_id": "evaluation-01-single-r1",
+      "case_id": "evaluation-01",
+      "difficulty": "complex",
+      "question": "为什么模型自评不能直接代表事实准确率？设计包含引用支持与人工一致性的评价方法。",
+      "mode": "single",
+      "repeat": 1,
+      "rubric": [
+        "指出评审偏差",
+        "引用存在不等于支持",
+        "定义独立复核与一致性"
+      ],
+      "order": 59
+    }
+  ],
+  "total_units": 60,
+  "estimated_duration_minutes": 60.0
+}
